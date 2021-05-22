@@ -1,7 +1,19 @@
+from .models import Test
+from django.db import models
 from rest_framework import fields, serializers
-from .models import Testfile
+from rest_framework.serializers import Serializer, FileField
+
+class UploadSerializer(Serializer):
+    fileUpload = FileField()
+    class Meta:
+        fields = ['fileUpload']
 
 class TestSerializer(serializers.ModelSerializer):
+    
     class Meta:
-        model = Testfile
-        fields = '__all__'
+        model = Test
+        fields = (
+            'id',
+            'name',
+            'text'
+        )
