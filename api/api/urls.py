@@ -16,18 +16,20 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.conf.urls import include
+from django.urls.conf import re_path
 from django.views.generic import base
 
 from rest_framework.routers import DefaultRouter
 from catch import views
-from catch.views import TestViewSet
+from catch.views import TestViewSet, UploadViewSet
 
 router = DefaultRouter()
-router.register(r'upload', views.UploadViewSet, basename='upload')
+router.register(r'test', views.TestViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('catch/', include('catch.urls')),
     path('', include(router.urls)),
-    path('test/', TestViewSet.as_view())
+    path('upload/', UploadViewSet.as_view()),
+    # path('upload/<str:filename>', UploadViewSet.as_view())
 ]

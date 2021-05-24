@@ -1,3 +1,4 @@
+from os import terminal_size
 from django.db import models
 
 # Create your models here.
@@ -6,3 +7,5 @@ class Test(models.Model):
     name = models.CharField(max_length=100)
     text = models.CharField(max_length=100)
     
+class Upload(models.Model):
+    files = models.FileField(null=True, upload_to='media')
