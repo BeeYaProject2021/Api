@@ -54,9 +54,16 @@ class TestViewSet(APIView):
         testFile = Test.objects.all()
         return testFile
     
+    # Use ?id=x to query the data of number x id
     def get(self, request, *args, **kwargs):
-        testFile = self.getQuery()
-        serializer = TestSerializer(testFile, many=True)
+        try:
+            id = request.query_params["id"]
+            if id != None:
+                testFile = Test.objects.get(id=id)
+                serializer = TestSerializer(testFile)
+        except:
+            testFile = self.getQuery()
+            serializer = TestSerializer(testFile, many=True)
 
         return Response(serializer.data)
     
