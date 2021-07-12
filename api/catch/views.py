@@ -1,4 +1,4 @@
-import uuid, os
+import uuid, os, threading
 from os import name
 from subprocess import run, PIPE
 from django.core.files.storage import default_storage
@@ -22,11 +22,11 @@ from rest_framework.parsers import FileUploadParser, JSONParser, MultiPartParser
 from .models import Test, Upload
 from .serializers import TestSerializer, UploadSerializer
 from django.conf import settings
+from catch.tasks import RunUserData, add
 
-
-# Create your views here.
+# Combine CNN model's with id programs
 def GetUserData(f, id):
-    path = settings.PROJECT_ROOT + "/train/CNN/"
+    path = settings.PROJECT_ROOT + "/train/TestModel/"
 
     with open(path + "base.py", "r") as b:
         f.write(b.read())
@@ -38,6 +38,11 @@ def GetUserData(f, id):
     with open(path + "end.py", "r") as e:
         f.write(e.read())
 
+# def RunUserData(path):
+#     # with open(path + "/combine.py", "r") as r:
+#     #     exec(r.read())
+
+#     os.system(f"python3 {path}/combine.py") 
 
 def catch(request):
     return render(request, 'catch.html', {
@@ -53,11 +58,15 @@ class UploadViewSet(APIView):
         fileUpload = request.FILES.getlist('file')
         modelID = request.data.getlist('model')
 
+        # lock = threading.Lock()
+
         IDs = list(map(int, modelID))
         # for i in modelID:
         #     IDs.append(int(i))
         
         print(IDs)
+
+        # lock.acquire()
 
         # Create uuid to be path
         userID = uuid.uuid4().hex
@@ -73,12 +82,17 @@ class UploadViewSet(APIView):
         f = open(path + "/combine.py", "w+")
         GetUserData(f, IDs)
         f.close()
-
+        
+        # Take mission for Celery worker to run file
+        RunUserData.delay(path)
+        # lock.release()
         # Call run file to train, choose one to run
         # May be ⚠ DANGER ⚠
-        # with open(path + "/combine.py", "r") as r:
-        #     exec(r.read())
-        # os.system(f"python3 {path}/combine.py")
+
+            # with open(path + "/combine.py", "r") as r:
+            #     exec(r.read())
+
+            # os.system(f"python3 {path}/combine.py")
 
         # Response with files' names and uuid for user
         return Response(f"{ans} {userID}")
