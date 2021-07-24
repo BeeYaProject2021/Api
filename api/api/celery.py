@@ -4,8 +4,9 @@ from celery import Celery
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'api.settings')
-
-app = Celery('api')
+BROKER_URL = 'pyamqp://B04:BFuV+90434@140.136.151.88:5672/api'
+BACKEND = 'redis://localhost/0'
+app = Celery('api', broker=BROKER_URL)
 
 # Using a string here means the worker doesn't have to serialize
 # the configuration object to child processes.

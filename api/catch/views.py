@@ -1,5 +1,6 @@
 import uuid, os, threading
 from os import name
+from queue import Empty, Queue
 from subprocess import run, PIPE
 from django.core.files.storage import default_storage
 from django.db.models.query import QuerySet
@@ -24,9 +25,45 @@ from .serializers import TestSerializer, UploadSerializer
 from django.conf import settings
 from catch.tasks import RunUserData, add
 
+qq = Queue()
+qq.put(0)
+threads = []
+index = 0
+
+#CNN model
+def cnn(f,id):
+    f.write("import tensorflow as tf\n"
+    +"from tensorflow.keras import datasets, layers, models\n"
+    +"print(\"CNN TRAINING START!\\n\\n\")\n"
+    +"(train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()\n"
+    +"# Normalize pixel values to be between 0 and 1\n"
+    +"train_images, test_images = train_images / 255.0, test_images / 255.0\n"
+    +"model = models.Sequential()\n")
+
+    for i in id:
+        if i==1:
+            f.write("model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)))\n")
+        elif i==2:
+            f.write("model.add(layers.MaxPooling2D((2, 2)))\n")
+        elif i==3:
+            f.write("model.add(layers.Conv2D(64, (3, 3), activation='relu'))\n")
+        elif i==4:
+            f.write("model.add(layers.Flatten())\n"
+            +"model.add(layers.Dense(64, activation='relu'))\n"
+            +"model.add(layers.Dense(10))\n")
+    
+    f.write("model.compile(optimizer='adam',loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),metrics=['accuracy'])\n"
+    +"model.summary()\n"
+    +"model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))\n"
+    +"#history = model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))\n"
+    +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
+    +"#print(test_acc)\n")
+
+
+
 # Combine CNN model's with id programs
 def GetUserData(f, id):
-    path = settings.PROJECT_ROOT + "/train/TestModel/"
+    path = settings.PROJECT_ROOT + "/train/CNN/"
 
     with open(path + "base.py", "r") as b:
         f.write(b.read())
@@ -36,13 +73,7 @@ def GetUserData(f, id):
             f.write(tmp.read())
     
     with open(path + "end.py", "r") as e:
-        f.write(e.read())
-
-# def RunUserData(path):
-#     # with open(path + "/combine.py", "r") as r:
-#     #     exec(r.read())
-
-#     os.system(f"python3 {path}/combine.py") 
+        f.write(e.read()) 
 
 def catch(request):
     return render(request, 'catch.html', {
@@ -54,19 +85,17 @@ class UploadViewSet(APIView):
     # parser_classes = [MultiPartParser]
 
     def post(self, request, format=None):
+
+        global index
         # To get list of files and code id
         fileUpload = request.FILES.getlist('file')
         modelID = request.data.getlist('model')
-
-        # lock = threading.Lock()
-
+        
         IDs = list(map(int, modelID))
         # for i in modelID:
         #     IDs.append(int(i))
         
         print(IDs)
-
-        # lock.acquire()
 
         # Create uuid to be path
         userID = uuid.uuid4().hex
@@ -80,20 +109,22 @@ class UploadViewSet(APIView):
             default_storage.save(path + "/" + i.name, ContentFile(i.read()))
 
         f = open(path + "/combine.py", "w+")
-        GetUserData(f, IDs)
+        #GetUserData(f, IDs)
+        cnn(f,IDs)
         f.close()
         
         # Take mission for Celery worker to run file
-        RunUserData.delay(path)
-        # lock.release()
-        # Call run file to train, choose one to run
-        # May be ⚠ DANGER ⚠
-
-            # with open(path + "/combine.py", "r") as r:
-            #     exec(r.read())
-
-            # os.system(f"python3 {path}/combine.py")
-
+        t = threading.Thread(target=RunUserData.delay, args=(path, userID), name=userID)
+        t.start()
+        t.join()
+        # t = threading.Thread(target=add.delay, args=(IDs,))
+        # if not qq.empty():
+        #     print("index is ", index)
+        #     threads[ index ].start()
+        #     threads[ index ].join()
+        
+        # index += 1
+        # print("next index is ", index)
         # Response with files' names and uuid for user
         return Response(f"{ans} {userID}")
 
