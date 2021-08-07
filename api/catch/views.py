@@ -1,4 +1,4 @@
-import uuid, os, threading
+import uuid, os, threading, json
 from os import name
 from queue import Empty, Queue
 from subprocess import run, PIPE
@@ -59,6 +59,32 @@ def cnn(f,id):
     +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
     +"#print(test_acc)\n")
 
+def cnn2(f,models):
+    f.write("import tensorflow as tf\n"
+    +"from tensorflow.keras import datasets, layers, models\n"
+    +"print(\"CNN TRAINING START!\\n\\n\")\n"
+    +"(train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()\n"
+    +"# Normalize pixel values to be between 0 and 1\n"
+    +"train_images, test_images = train_images / 255.0, test_images / 255.0\n"
+    +"model = models.Sequential()\n")
+
+    for model in models:
+        if model['id']==1:
+            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", activation="+model['activation']+"))\n")
+        elif model['id']==2:
+            f.write("model.add(layers.MaxPooling2D(pool_size="+model['pool_size']+"))\n")
+        elif model['id']==3:
+            f.write("model.add(layers.Flatten())\n")
+        elif model['id']==4:
+            f.write("model.add(layers.Dense("+model['units']+", activation="+model['activation']+"))\n")
+    
+    f.write("model.compile(optimizer='adam',loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),metrics=['accuracy'])\n"
+    +"model.summary()\n"
+    +"model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))\n"
+    +"#history = model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))\n"
+    +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
+    +"#print(test_acc)\n")
+
 
 
 # Combine CNN model's with id programs
@@ -89,13 +115,15 @@ class UploadViewSet(APIView):
         global index
         # To get list of files and code id
         fileUpload = request.FILES.getlist('file')
+        # modelID = request.data.get('model')
         modelID = request.data.getlist('model')
         
+        # Use json to load string as json object
+        # IDs = json.loads(modelID)
+        # for i in IDs:
+        #     print(i['id'])
+
         IDs = list(map(int, modelID))
-        # for i in modelID:
-        #     IDs.append(int(i))
-        
-        print(IDs)
 
         # Create uuid to be path
         userID = uuid.uuid4().hex
@@ -114,17 +142,11 @@ class UploadViewSet(APIView):
         f.close()
         
         # Take mission for Celery worker to run file
-        t = threading.Thread(target=RunUserData.delay, args=(path, userID), name=userID)
-        t.start()
-        t.join()
-        # t = threading.Thread(target=add.delay, args=(IDs,))
-        # if not qq.empty():
-        #     print("index is ", index)
-        #     threads[ index ].start()
-        #     threads[ index ].join()
+        RunUserData.delay(path, userID)
         
         # index += 1
         # print("next index is ", index)
+
         # Response with files' names and uuid for user
         return Response(f"{ans} {userID}")
 
