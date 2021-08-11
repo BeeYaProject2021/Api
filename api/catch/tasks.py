@@ -14,14 +14,10 @@ Lock = threading.Lock()
 @shared_task
 def RunUserData(path, id):
     flag = 0
-    # Lock.acquire()
-
     with open(path + "/combine.py", "r") as r:
         exec(r.read())
 
     # os.system(f"python3 {path}/combine.py")
-    # queue.put(id)
-    # Lock.release()
     return flag
 
 @shared_task

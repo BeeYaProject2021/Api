@@ -1,3 +1,4 @@
+from enum import auto
 import uuid, os, threading, json
 from os import name
 from queue import Empty, Queue
@@ -20,15 +21,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FileUploadParser, JSONParser, MultiPartParser
 
-from .models import Test, Upload
-from .serializers import TestSerializer, UploadSerializer
+from .models import Test, Upload, Train
+from .serializers import TestSerializer, TrainSerializer, UploadSerializer
 from django.conf import settings
-from catch.tasks import RunUserData, add
-
-qq = Queue()
-qq.put(0)
-threads = []
-index = 0
+from catch.tasks import RunUserData
 
 #CNN model
 def cnn(f,id):
@@ -85,21 +81,19 @@ def cnn2(f,models):
     +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
     +"#print(test_acc)\n")
 
-
-
 # Combine CNN model's with id programs
-def GetUserData(f, id):
-    path = settings.PROJECT_ROOT + "/train/CNN/"
+# def GetUserData(f, id):
+#     path = settings.PROJECT_ROOT + "/train/CNN/"
 
-    with open(path + "base.py", "r") as b:
-        f.write(b.read())
+#     with open(path + "base.py", "r") as b:
+#         f.write(b.read())
 
-    for i in id:
-        with open(path + f"{i}.py", "r") as tmp:
-            f.write(tmp.read())
+#     for i in id:
+#         with open(path + f"{i}.py", "r") as tmp:
+#             f.write(tmp.read())
     
-    with open(path + "end.py", "r") as e:
-        f.write(e.read()) 
+#     with open(path + "end.py", "r") as e:
+#         f.write(e.read()) 
 
 def catch(request):
     return render(request, 'catch.html', {
@@ -109,10 +103,29 @@ def catch(request):
 # Test for upload file
 class UploadViewSet(APIView):
     # parser_classes = [MultiPartParser]
+    serializer_class = TrainSerializer
+
+    # GET for training status
+    def get_query(self):
+        train_status = Train.objects.all()
+        return train_status
+
+    def get(self, request, format=None):
+        uid = request.query_params['train_id']
+        print(uid)
+
+        if uid != None:
+            status = Train.objects.filter(train_id=uid)
+            serializers = TrainSerializer(status, many=True)
+        else:
+            status = self.get_query()
+            serializers = TrainSerializer(status, many=True)
+
+        print(serializers.data)
+        return Response(serializers.data)
 
     def post(self, request, format=None):
 
-        global index
         # To get list of files and code id
         fileUpload = request.FILES.getlist('file')
         # modelID = request.data.get('model')
@@ -130,6 +143,16 @@ class UploadViewSet(APIView):
         path = settings.MEDIA_ROOT + f"/{userID}"
         os.mkdir(path)
 
+        # Store a simple train status
+        new_train = Train.objects.create(
+            train_id=userID, 
+            complete=False, 
+            progress_epoch=0,
+            start_date=auto)
+
+        print(new_train.start_date)
+        new_train.save()
+
         ans = ""
         for i in fileUpload:
             ans += " " + i.name
@@ -144,8 +167,6 @@ class UploadViewSet(APIView):
         # Take mission for Celery worker to run file
         RunUserData.delay(path, userID)
         
-        # index += 1
-        # print("next index is ", index)
 
         # Response with files' names and uuid for user
         return Response(f"{ans} {userID}")

@@ -21,10 +21,11 @@ from django.views.generic import base
 
 from rest_framework.routers import DefaultRouter
 from catch import views
-from catch.views import TestViewSet, UploadViewSet
+from catch.views import UploadViewSet
 
 router = DefaultRouter()
 router.register(r'test', views.TestViewSet)
+# router.register(r'train_status', views.TrainViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
