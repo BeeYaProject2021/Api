@@ -15,6 +15,7 @@ class Upload(models.Model):
 
 class Train(models.Model):
     train_id = models.CharField(max_length=100)
+    # file_name = models.CharField(max_length=100)
     complete = models.BooleanField(null=True)
     progress_epoch = models.IntegerField(null=True)
     start_date = models.DateTimeField(auto_now_add=True)

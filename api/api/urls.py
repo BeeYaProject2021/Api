@@ -32,5 +32,6 @@ urlpatterns = [
     path('catch/', include('catch.urls')),
     path('', include(router.urls)),
     path('upload/', UploadViewSet.as_view()),
+    path('download/', views.downloadModel)
     # path('upload/<str:filename>', UploadViewSet.as_view())
 ]

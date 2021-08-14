@@ -5,8 +5,8 @@ from queue import Empty, Queue
 from subprocess import run, PIPE
 from django.core.files.storage import default_storage
 from django.db.models.query import QuerySet
-from django.http import response, JsonResponse
-from django.http.response import HttpResponse
+from django.http import response, JsonResponse, FileResponse
+from django.http.response import FileResponse, HttpResponse
 from django.shortcuts import render, resolve_url
 from django.db import transaction
 from django.core.files.base import ContentFile
@@ -16,18 +16,39 @@ from datetime import datetime
 from rest_framework import serializers, viewsets, status
 from rest_framework.generics import GenericAPIView
 from rest_framework.viewsets import ViewSet
-from rest_framework.decorators import api_view, parser_classes
+from rest_framework.decorators import api_view, parser_classes, renderer_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FileUploadParser, JSONParser, MultiPartParser
+from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
 
 from .models import Test, Upload, Train
 from .serializers import TestSerializer, TrainSerializer, UploadSerializer
 from django.conf import settings
 from catch.tasks import RunUserData
 
+# For downloading the combine.py file(model)
+@api_view(('GET',))
+def downloadModel(request):
+    try:
+        uid = request.query_params['train_id']
+        print(uid)
+
+        if uid != None:
+            path = settings.MEDIA_ROOT + f"/{uid}"
+            model = open(path + "/combine.py", "rb")
+            
+            # Setup response content-type
+            response = FileResponse(model)
+            response['Content-Type']='application/octet-stream'
+            response['Content-Disposition']='attachment;filename="combine.py"'
+    except:
+        response = Response("NO TRAINING ID!", status=status.HTTP_400_BAD_REQUEST)
+
+    return response
+
 #CNN model
-def cnn(f,id):
+def cnn(f,models):
     f.write("import tensorflow as tf\n"
     +"from tensorflow.keras import datasets, layers, models\n"
     +"print(\"CNN TRAINING START!\\n\\n\")\n"
@@ -36,14 +57,14 @@ def cnn(f,id):
     +"train_images, test_images = train_images / 255.0, test_images / 255.0\n"
     +"model = models.Sequential()\n")
 
-    for i in id:
-        if i==1:
+    for model in models:
+        if model['id']==1:
             f.write("model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)))\n")
-        elif i==2:
+        elif model['id']==2:
             f.write("model.add(layers.MaxPooling2D((2, 2)))\n")
-        elif i==3:
+        elif model['id']==3:
             f.write("model.add(layers.Conv2D(64, (3, 3), activation='relu'))\n")
-        elif i==4:
+        elif model['id']==4:
             f.write("model.add(layers.Flatten())\n"
             +"model.add(layers.Dense(64, activation='relu'))\n"
             +"model.add(layers.Dense(10))\n")
@@ -111,33 +132,50 @@ class UploadViewSet(APIView):
         return train_status
 
     def get(self, request, format=None):
-        uid = request.query_params['train_id']
-        print(uid)
 
-        if uid != None:
-            status = Train.objects.filter(train_id=uid)
-            serializers = TrainSerializer(status, many=True)
-        else:
+        try:
+            uid = request.query_params['train_id']
+            print(uid)
+
+            if uid != None:
+                # Use filter instead get if that type is uniterable
+                status = Train.objects.filter(train_id=uid)
+                serializers = TrainSerializer(status, many=True)
+        except:
             status = self.get_query()
             serializers = TrainSerializer(status, many=True)
 
-        print(serializers.data)
+        # print(serializers.data)
         return Response(serializers.data)
 
     def post(self, request, format=None):
 
         # To get list of files and code id
         fileUpload = request.FILES.getlist('file')
-        # modelID = request.data.get('model')
-        modelID = request.data.getlist('model')
-        
+
+        models = request.data.get('model')
+
+        # modelID = request.data.getlist('model')
+        # IDs = list(map(int, modelID))
+
         # Use json to load string as json object
-        # IDs = json.loads(modelID)
-        # for i in IDs:
-        #     print(i['id'])
+        modelIN = json.loads(models)
+        for i in modelIN:
+            id = i['id']
+            print("id is", id)
+            if id == 1:
+                print(i['filters'])
+                print(i['kernel_size'])
+                print(i['activation'])
+            elif id == 2:
+                print(i['pool_size'])
+            elif id == 3:
+                continue
+            else:
+                print(i['units'])
+                print(i['activation'])
 
-        IDs = list(map(int, modelID))
-
+                
         # Create uuid to be path
         userID = uuid.uuid4().hex
         path = settings.MEDIA_ROOT + f"/{userID}"
@@ -161,11 +199,11 @@ class UploadViewSet(APIView):
 
         f = open(path + "/combine.py", "w+")
         #GetUserData(f, IDs)
-        cnn(f,IDs)
+        cnn(f,modelIN)
         f.close()
         
         # Take mission for Celery worker to run file
-        RunUserData.delay(path, userID)
+        # RunUserData.delay(path, userID)
         
 
         # Response with files' names and uuid for user
