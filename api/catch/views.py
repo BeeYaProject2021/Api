@@ -1,6 +1,7 @@
 from enum import auto
-import uuid, os, threading, json
+import uuid, os, threading, json, socket
 from os import name
+from _thread import *
 from queue import Empty, Queue
 from subprocess import run, PIPE
 from django.core.files.storage import default_storage
@@ -41,7 +42,7 @@ def downloadModel(request):
             # Setup response content-type
             response = FileResponse(model)
             response['Content-Type']='application/octet-stream'
-            response['Content-Disposition']='attachment;filename="combine.py"'
+            response['Content-Disposition']='attachment;filename="' + uid + '.py"'
     except:
         response = Response("NO TRAINING ID!", status=status.HTTP_400_BAD_REQUEST)
 
@@ -50,12 +51,21 @@ def downloadModel(request):
 #CNN model
 def cnn(f,models):
     f.write("import tensorflow as tf\n"
+    +"from tensorflow import keras\n"
     +"from tensorflow.keras import datasets, layers, models\n"
     +"print(\"CNN TRAINING START!\\n\\n\")\n"
     +"(train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()\n"
     +"# Normalize pixel values to be between 0 and 1\n"
     +"train_images, test_images = train_images / 255.0, test_images / 255.0\n"
-    +"model = models.Sequential()\n")
+    +"model = models.Sequential()\n\n")
+
+    f.write("class CustomCallback(keras.callbacks.Callback):\n"
+    +"  def on_train_end(self, logs=None):\n"
+    +"      print(\"\\n----Training Done!----\")\n\n"
+    +"  def on_epoch_end(self, epoch, logs=None):\n"
+    +"      print(\"Now epoch count is: {}\".format(epoch))\n\n"
+    +"  def on_train_batch_end(self, batch, logs=None):\n"
+    +"      print(\"Now batch is: {}\".format(batch))\n\n")
 
     for model in models:
         if model['id']==1:
@@ -71,50 +81,45 @@ def cnn(f,models):
     
     f.write("model.compile(optimizer='adam',loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),metrics=['accuracy'])\n"
     +"model.summary()\n"
-    +"model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))\n"
+    +"model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
     +"#history = model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))\n"
     +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
     +"#print(test_acc)\n")
 
 def cnn2(f,models):
     f.write("import tensorflow as tf\n"
+    +"from tensorflow import keras\n"
     +"from tensorflow.keras import datasets, layers, models\n"
     +"print(\"CNN TRAINING START!\\n\\n\")\n"
     +"(train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()\n"
     +"# Normalize pixel values to be between 0 and 1\n"
     +"train_images, test_images = train_images / 255.0, test_images / 255.0\n"
-    +"model = models.Sequential()\n")
+    +"model = models.Sequential()\n\n")
+
+    f.write("class CustomCallback(keras.callbacks.Callback):\n"
+    +"  def on_train_end(self, logs=None):\n"
+    +"      print(\"\\n----Training Done!----\")\n\n"
+    +"  def on_epoch_end(self, epoch, logs=None):\n"
+    +"      print(\"Now epoch count is: {}\".format(epoch))\n\n"
+    +"  def on_train_batch_end(self, batch, logs=None):\n"
+    +"      print(\"Now batch is: {}\".format(batch))\n\n")
 
     for model in models:
         if model['id']==1:
-            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", activation="+model['activation']+"))\n")
+            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"'))\n")
         elif model['id']==2:
             f.write("model.add(layers.MaxPooling2D(pool_size="+model['pool_size']+"))\n")
         elif model['id']==3:
             f.write("model.add(layers.Flatten())\n")
         elif model['id']==4:
-            f.write("model.add(layers.Dense("+model['units']+", activation="+model['activation']+"))\n")
+            f.write("model.add(layers.Dense("+model['units']+", activation='"+model['activation']+"'))\n")
     
     f.write("model.compile(optimizer='adam',loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),metrics=['accuracy'])\n"
     +"model.summary()\n"
-    +"model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))\n"
-    +"#history = model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))\n"
+    +"model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
+    +"#history = model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
     +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
     +"#print(test_acc)\n")
-
-# Combine CNN model's with id programs
-# def GetUserData(f, id):
-#     path = settings.PROJECT_ROOT + "/train/CNN/"
-
-#     with open(path + "base.py", "r") as b:
-#         f.write(b.read())
-
-#     for i in id:
-#         with open(path + f"{i}.py", "r") as tmp:
-#             f.write(tmp.read())
-    
-#     with open(path + "end.py", "r") as e:
-#         f.write(e.read()) 
 
 def catch(request):
     return render(request, 'catch.html', {
@@ -166,6 +171,7 @@ class UploadViewSet(APIView):
             if id == 1:
                 print(i['filters'])
                 print(i['kernel_size'])
+                print(i['padding'])
                 print(i['activation'])
             elif id == 2:
                 print(i['pool_size'])
@@ -199,12 +205,11 @@ class UploadViewSet(APIView):
 
         f = open(path + "/combine.py", "w+")
         #GetUserData(f, IDs)
-        cnn(f,modelIN)
+        cnn2(f,modelIN)
         f.close()
         
         # Take mission for Celery worker to run file
-        # RunUserData.delay(path, userID)
-        
+        RunUserData.delay(path, userID)
 
         # Response with files' names and uuid for user
         return Response(f"{ans} {userID}")
