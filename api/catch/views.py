@@ -28,6 +28,8 @@ from .serializers import TestSerializer, TrainSerializer, UploadSerializer
 from django.conf import settings
 from catch.tasks import RunUserData
 
+port = 9999
+thread_count = 0
 # For downloading the combine.py file(model)
 @api_view(('GET',))
 def downloadModel(request):
@@ -49,7 +51,7 @@ def downloadModel(request):
     return response
 
 #CNN model
-def cnn(f,models):
+def cnn(f, models):
     f.write("import tensorflow as tf\n"
     +"from tensorflow import keras\n"
     +"from tensorflow.keras import datasets, layers, models\n"
@@ -86,27 +88,58 @@ def cnn(f,models):
     +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
     +"#print(test_acc)\n")
 
-def cnn2(f,models):
+def cnn2(f, models, uid, port, fn):
     f.write("import tensorflow as tf\n"
+    +"import numpy as np\n"
     +"from tensorflow import keras\n"
-    +"from tensorflow.keras import datasets, layers, models\n"
-    +"print(\"CNN TRAINING START!\\n\\n\")\n"
-    +"(train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()\n"
-    +"# Normalize pixel values to be between 0 and 1\n"
-    +"train_images, test_images = train_images / 255.0, test_images / 255.0\n"
+    +"from tensorflow.keras import layers, models\n"
+    +"\nimport socket\n"
+    +"ServerSocket = socket.socket()\n"
+    +"ServerSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+    +"host = '140.136.151.88'\n"
+    +"port = " + str(port) + "\n\n"
+    +"try:\n"
+    +"    ServerSocket.bind((host, port))\n"
+    +"except socket.error as e:\n"
+    +"    print(str(e))\n\n"
+    +"print('Waiting for a Connection..')\n"
+    +"ServerSocket.listen(1)\n"
+    +"conn, address = ServerSocket.accept()\n"
+    +"print('Connected to: ' + address[0] + ':' + str(address[1]))\n\n")
+
+    f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
+    +"uid = '" + str(uid) + "'\n"
+    +"file_name = '" + fn + "'\n"
+    +"train = np.load('/home/b04/桌面/Github/Api/api/media/'+ uid + '/' + file_name)\n"
+    +"train_images, train_labels = train['train_img'], train['train_lab']\n"
+    +"test_images, test_labels = train['test_img'], train['test_lab']\n"
+    +"train_images = train_images / 255.0\n"
+    +"test_images = test_images / 255.0\n\n"
     +"model = models.Sequential()\n\n")
+    
 
     f.write("class CustomCallback(keras.callbacks.Callback):\n"
-    +"  def on_train_end(self, logs=None):\n"
-    +"      print(\"\\n----Training Done!----\")\n\n"
-    +"  def on_epoch_end(self, epoch, logs=None):\n"
-    +"      print(\"Now epoch count is: {}\".format(epoch))\n\n"
-    +"  def on_train_batch_end(self, batch, logs=None):\n"
-    +"      print(\"Now batch is: {}\".format(batch))\n\n")
+    +"    global conn\n"
+    +"    def on_train_end(self, logs=None):\n"
+    +"        keys = list(logs.keys())\n"
+    +"        print(\"THE KEY is {}\".format(keys))\n"
+    +"        print(logs['accuracy'], logs['val_accuracy'])\n"
+    +"        print(\"\\n----Training Done!----\")\n"
+    +"        conn.send(str.encode(str(logs['accuracy'])))\n"
+    +"        conn.send(str.encode(str(logs['val_accuracy'])))\n"
+    +"        conn.send(str.encode(\"Training Done!\"))\n"
+    +"        conn.close()\n"
+    +"    def on_epoch_end(self, epoch, logs=None):\n"
+    +"        conn.send(str.encode(\"Now epoch is: \"+str(epoch+1)))\n"
+    +"    def on_train_batch_end(self, batch, logs=None):\n"
+    +"        conn.send(str.encode(str(batch+1)))\n\n")
 
     for model in models:
         if model['id']==1:
-            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"'))\n")
+            if 'input_shape' not in model:
+                f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"'))\n")
+            else:
+                f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"', input_shape=("+model['input_shape'][0]+", "+model['input_shape'][1]+", 3)))\n")
         elif model['id']==2:
             f.write("model.add(layers.MaxPooling2D(pool_size="+model['pool_size']+"))\n")
         elif model['id']==3:
@@ -120,6 +153,11 @@ def cnn2(f,models):
     +"#history = model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
     +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
     +"#print(test_acc)\n")
+
+def create_thread(path, uid):
+    with open(path + "/combine.py", "r") as r:
+        exec(r.read())
+
 
 def catch(request):
     return render(request, 'catch.html', {
@@ -154,10 +192,12 @@ class UploadViewSet(APIView):
         return Response(serializers.data)
 
     def post(self, request, format=None):
-
+        
+        global port
+        port += 1
         # To get list of files and code id
         fileUpload = request.FILES.getlist('file')
-
+        print(fileUpload[0].name)
         models = request.data.get('model')
 
         # modelID = request.data.getlist('model')
@@ -187,32 +227,30 @@ class UploadViewSet(APIView):
         path = settings.MEDIA_ROOT + f"/{userID}"
         os.mkdir(path)
 
-        # Store a simple train status
-        new_train = Train.objects.create(
-            train_id=userID, 
-            complete=False, 
-            progress_epoch=0,
-            start_date=auto)
-
-        print(new_train.start_date)
-        new_train.save()
-
         ans = ""
         for i in fileUpload:
-            ans += " " + i.name
+            ans += i.name
             # Store list of files with absolutely path
             default_storage.save(path + "/" + i.name, ContentFile(i.read()))
 
         f = open(path + "/combine.py", "w+")
-        #GetUserData(f, IDs)
-        cnn2(f,modelIN)
+
+        cnn2(f, modelIN, userID, port, fileUpload[0].name)
         f.close()
         
         # Take mission for Celery worker to run file
-        RunUserData.delay(path, userID)
+        #RunUserData.delay(path, userID)
+        
+        # path2 = settings.MEDIA_ROOT
+        # start_new_thread(create_thread,(path2,userID,))
+        start_new_thread(create_thread,(path,userID,))
+        global thread_count
+        thread_count += 1
+        print('Port Number: ' + str(port))
+        print('Thread Number: ' + str(thread_count))
 
         # Response with files' names and uuid for user
-        return Response(f"{ans} {userID}")
+        return Response(ans + " " + str(userID) + " " + str(port))
 
 # Test for GET and POST methods, had implemented by viewsets
 class TestViewSet(viewsets.ModelViewSet):
