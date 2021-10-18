@@ -28,7 +28,7 @@ from .serializers import TestSerializer, TrainSerializer, UploadSerializer
 from django.conf import settings
 from catch.tasks import RunUserData
 
-port = 9999
+port = 48762
 thread_count = 0
 # For downloading the combine.py file(model)
 @api_view(('GET',))
@@ -125,14 +125,15 @@ def cnn2(f, models, uid, port, fn):
     +"        print(\"THE KEY is {}\".format(keys))\n"
     +"        print(logs['accuracy'], logs['val_accuracy'])\n"
     +"        print(\"\\n----Training Done!----\")\n"
-    +"        conn.send(str.encode(str(logs['accuracy'])))\n"
-    +"        conn.send(str.encode(str(logs['val_accuracy'])))\n"
+    +"        conn.send(str.encode(\"!\"+str(logs['accuracy'])))\n"
+    +"        conn.send(str.encode(\"!\"+str(logs['val_accuracy'])))\n"
     +"        conn.send(str.encode(\"Training Done!\"))\n"
+    +"        conn.send(str.encode(\"over\"))\n"
     +"        conn.close()\n"
     +"    def on_epoch_end(self, epoch, logs=None):\n"
-    +"        conn.send(str.encode(\"Now epoch is: \"+str(epoch+1)))\n"
+    +"        conn.send(str.encode(\"#\"+str(epoch+1)))\n"
     +"    def on_train_batch_end(self, batch, logs=None):\n"
-    +"        conn.send(str.encode(str(batch+1)))\n\n")
+    +"        conn.send(str.encode(\"@\"+str(batch+1)))\n\n")
 
     for model in models:
         if model['id']==1:
@@ -149,7 +150,7 @@ def cnn2(f, models, uid, port, fn):
     
     f.write("model.compile(optimizer='adam',loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),metrics=['accuracy'])\n"
     +"model.summary()\n"
-    +"model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
+    +"model.fit(train_images, train_labels, epochs=1, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
     +"#history = model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
     +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
     +"#print(test_acc)\n")
@@ -239,13 +240,13 @@ class UploadViewSet(APIView):
         f.close()
         
         # Take mission for Celery worker to run file
-        #RunUserData.delay(path, userID)
+        RunUserData.delay(path, userID)
         
         # path2 = settings.MEDIA_ROOT
         # start_new_thread(create_thread,(path2,userID,))
-        start_new_thread(create_thread,(path,userID,))
-        global thread_count
-        thread_count += 1
+        # start_new_thread(create_thread,(path,userID,))
+        # global thread_count
+        # thread_count += 1
         print('Port Number: ' + str(port))
         print('Thread Number: ' + str(thread_count))
 

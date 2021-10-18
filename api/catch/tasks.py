@@ -12,11 +12,11 @@ from subprocess import Popen
 
 @shared_task
 def RunUserData(path, id):
-    # with open(path + "/combine.py", "r") as r:
-    #     exec(r.read())
+    with open(path + "/combine.py", "r") as r:
+        exec(r.read())
 
     # os.system(f"python3 {path}/combine.py")
-    Popen(path+'/combine.py')
+    # Popen(path+'/combine.py')
 
 @shared_task
 def add(x, y):
