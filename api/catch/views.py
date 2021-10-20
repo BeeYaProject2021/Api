@@ -150,7 +150,7 @@ def cnn2(f, models, uid, port, fn):
     
     f.write("model.compile(optimizer='adam',loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),metrics=['accuracy'])\n"
     +"model.summary()\n"
-    +"model.fit(train_images, train_labels, epochs=1, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
+    +"model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
     +"#history = model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
     +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
     +"#print(test_acc)\n")
