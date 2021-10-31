@@ -11,6 +11,7 @@ from django.http.response import FileResponse, HttpResponse
 from django.shortcuts import render, resolve_url
 from django.db import transaction
 from django.core.files.base import ContentFile
+from zipfile import ZipFile
 
 from datetime import datetime
 
@@ -29,8 +30,8 @@ from django.conf import settings
 from catch.tasks import RunUserData
 
 port = 48762
-thread_count = 0
-# For downloading the combine.py file(model)
+
+# For downloading the zip file(model)
 @api_view(('GET',))
 def downloadModel(request):
     try:
@@ -39,60 +40,28 @@ def downloadModel(request):
 
         if uid != None:
             path = settings.MEDIA_ROOT + f"/{uid}"
-            model = open(path + "/combine.py", "rb")
-            
+            zip_filename = path + f"/{uid}.zip"
+            zipObj = ZipFile(zip_filename, "w")
+            zipObj.write(path + "/combine.py")
+            zipObj.write(path + "/saved_model.pb")
+            zipObj.close()
+
+            model = open(path + f"/{uid}.zip", "rb")
             # Setup response content-type
             response = FileResponse(model)
-            response['Content-Type']='application/octet-stream'
-            response['Content-Disposition']='attachment;filename="' + uid + '.py"'
+            response['Content-Type']='application/x-zip-compressed'
+            response['Content-Disposition']='attachment;filename="' + uid + '.zip"'
     except:
         response = Response("NO TRAINING ID!", status=status.HTTP_400_BAD_REQUEST)
 
     return response
 
 #CNN model
-def cnn(f, models):
-    f.write("import tensorflow as tf\n"
-    +"from tensorflow import keras\n"
-    +"from tensorflow.keras import datasets, layers, models\n"
-    +"print(\"CNN TRAINING START!\\n\\n\")\n"
-    +"(train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()\n"
-    +"# Normalize pixel values to be between 0 and 1\n"
-    +"train_images, test_images = train_images / 255.0, test_images / 255.0\n"
-    +"model = models.Sequential()\n\n")
-
-    f.write("class CustomCallback(keras.callbacks.Callback):\n"
-    +"  def on_train_end(self, logs=None):\n"
-    +"      print(\"\\n----Training Done!----\")\n\n"
-    +"  def on_epoch_end(self, epoch, logs=None):\n"
-    +"      print(\"Now epoch count is: {}\".format(epoch))\n\n"
-    +"  def on_train_batch_end(self, batch, logs=None):\n"
-    +"      print(\"Now batch is: {}\".format(batch))\n\n")
-
-    for model in models:
-        if model['id']==1:
-            f.write("model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)))\n")
-        elif model['id']==2:
-            f.write("model.add(layers.MaxPooling2D((2, 2)))\n")
-        elif model['id']==3:
-            f.write("model.add(layers.Conv2D(64, (3, 3), activation='relu'))\n")
-        elif model['id']==4:
-            f.write("model.add(layers.Flatten())\n"
-            +"model.add(layers.Dense(64, activation='relu'))\n"
-            +"model.add(layers.Dense(10))\n")
-    
-    f.write("model.compile(optimizer='adam',loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),metrics=['accuracy'])\n"
-    +"model.summary()\n"
-    +"model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
-    +"#history = model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))\n"
-    +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
-    +"#print(test_acc)\n")
-
 def cnn2(f, models, uid, port, fn):
     f.write("import tensorflow as tf\n"
     +"import numpy as np\n"
     +"from tensorflow import keras\n"
-    +"from tensorflow.keras import layers, models\n"
+    +"from tensorflow.keras import layers, models, optimizers\n"
     +"\nimport socket\n"
     +"ServerSocket = socket.socket()\n"
     +"ServerSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
@@ -117,7 +86,6 @@ def cnn2(f, models, uid, port, fn):
     +"test_images = test_images / 255.0\n\n"
     +"model = models.Sequential()\n\n")
     
-
     f.write("class CustomCallback(keras.callbacks.Callback):\n"
     +"    global conn\n"
     +"    def on_train_end(self, logs=None):\n"
@@ -147,13 +115,13 @@ def cnn2(f, models, uid, port, fn):
             f.write("model.add(layers.Flatten())\n")
         elif model['id']==4:
             f.write("model.add(layers.Dense("+model['units']+", activation='"+model['activation']+"'))\n")
+        elif model['id']==-1:
+            f.write("opt=optimizers."+model['optimizer']+"(lr="+model['learning_rate']+")\n")
+            f.write("model.compile(optimizer=opt,loss='"+model['loss_fn']+"',metrics=['accuracy'])\n"
+            +"model.summary()\n"
+            +"model.fit(train_images, train_labels, batch_size="+model['batch_size']+", epochs="+model['epochs']+", callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n")
     
-    f.write("model.compile(optimizer='adam',loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),metrics=['accuracy'])\n"
-    +"model.summary()\n"
-    +"model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
-    +"#history = model.fit(train_images, train_labels, epochs=10, callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n"
-    +"#test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)\n"
-    +"#print(test_acc)\n")
+    f.write("model.save('/home/b04/桌面/Github/Api/api/media/'+ uid + '/')\n")
 
 def create_thread(path, uid):
     with open(path + "/combine.py", "r") as r:
@@ -167,7 +135,6 @@ def catch(request):
 
 # Test for upload file
 class UploadViewSet(APIView):
-    # parser_classes = [MultiPartParser]
     serializer_class = TrainSerializer
 
     # GET for training status
@@ -176,7 +143,6 @@ class UploadViewSet(APIView):
         return train_status
 
     def get(self, request, format=None):
-
         try:
             uid = request.query_params['train_id']
             print(uid)
@@ -201,28 +167,24 @@ class UploadViewSet(APIView):
         print(fileUpload[0].name)
         models = request.data.get('model')
 
-        # modelID = request.data.getlist('model')
-        # IDs = list(map(int, modelID))
-
         # Use json to load string as json object
         modelIN = json.loads(models)
-        for i in modelIN:
-            id = i['id']
-            print("id is", id)
-            if id == 1:
-                print(i['filters'])
-                print(i['kernel_size'])
-                print(i['padding'])
-                print(i['activation'])
-            elif id == 2:
-                print(i['pool_size'])
-            elif id == 3:
-                continue
-            else:
-                print(i['units'])
-                print(i['activation'])
+        # for i in modelIN:
+        #     id = i['id']
+        #     print("id is", id)
+        #     if id == 1:
+        #         print(i['filters'])
+        #         print(i['kernel_size'])
+        #         print(i['padding'])
+        #         print(i['activation'])
+        #     elif id == 2:
+        #         print(i['pool_size'])
+        #     elif id == 3:
+        #         continue
+        #     else:
+        #         print(i['units'])
+        #         print(i['activation'])
 
-                
         # Create uuid to be path
         userID = uuid.uuid4().hex
         path = settings.MEDIA_ROOT + f"/{userID}"
@@ -241,14 +203,7 @@ class UploadViewSet(APIView):
         
         # Take mission for Celery worker to run file
         RunUserData.delay(path, userID)
-        
-        # path2 = settings.MEDIA_ROOT
-        # start_new_thread(create_thread,(path2,userID,))
-        # start_new_thread(create_thread,(path,userID,))
-        # global thread_count
-        # thread_count += 1
         print('Port Number: ' + str(port))
-        print('Thread Number: ' + str(thread_count))
 
         # Response with files' names and uuid for user
         return Response(ans + " " + str(userID) + " " + str(port))
