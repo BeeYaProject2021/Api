@@ -1,6 +1,5 @@
-from enum import auto
-import uuid, os, threading, json, socket
-from os import name
+import uuid, os, threading, json, socket, zipfile
+from os.path import basename
 from _thread import *
 from queue import Empty, Queue
 from subprocess import run, PIPE
@@ -41,15 +40,15 @@ def downloadModel(request):
         if uid != None:
             path = settings.MEDIA_ROOT + f"/{uid}"
             zip_filename = path + f"/{uid}.zip"
-            zipObj = ZipFile(zip_filename, "w")
-            zipObj.write(path + "/combine.py")
-            zipObj.write(path + "/saved_model.pb")
+            zipObj = zipfile.ZipFile(zip_filename, "w")
+            zipObj.write(path + "/combine.py", basename(path + "/combine.py"))
+            zipObj.write(path + "/saved_model.pb", basename(path + "/saved_model.pb"))
             zipObj.close()
 
             model = open(path + f"/{uid}.zip", "rb")
             # Setup response content-type
             response = FileResponse(model)
-            response['Content-Type']='application/x-zip-compressed'
+            response['Content-Type']='application/zip'
             response['Content-Disposition']='attachment;filename="' + uid + '.zip"'
     except:
         response = Response("NO TRAINING ID!", status=status.HTTP_400_BAD_REQUEST)
@@ -57,7 +56,7 @@ def downloadModel(request):
     return response
 
 #CNN model
-def cnn2(f, models, uid, port, fn):
+def cnn2(f, path, models, uid, port, fn):
     f.write("import tensorflow as tf\n"
     +"import numpy as np\n"
     +"from tensorflow import keras\n"
@@ -79,7 +78,7 @@ def cnn2(f, models, uid, port, fn):
     f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
     +"uid = '" + str(uid) + "'\n"
     +"file_name = '" + fn + "'\n"
-    +"train = np.load('/home/b04/桌面/Github/Api/api/media/'+ uid + '/' + file_name)\n"
+    +"train = np.load('"+ path +"' + '/' + file_name)\n"
     +"train_images, train_labels = train['train_img'], train['train_lab']\n"
     +"test_images, test_labels = train['test_img'], train['test_lab']\n"
     +"train_images = train_images / 255.0\n"
@@ -95,13 +94,13 @@ def cnn2(f, models, uid, port, fn):
     +"        print(\"\\n----Training Done!----\")\n"
     +"        conn.send(str.encode(\"!\"+str(logs['accuracy'])))\n"
     +"        conn.send(str.encode(\"!\"+str(logs['val_accuracy'])))\n"
-    +"        conn.send(str.encode(\"Training Done!\"))\n"
+    +"        conn.send(str.encode(\"!Training Done!\"))\n"
     +"        conn.send(str.encode(\"over\"))\n"
     +"        conn.close()\n"
     +"    def on_epoch_end(self, epoch, logs=None):\n"
-    +"        conn.send(str.encode(\"#\"+str(epoch+1)))\n"
+    +"        conn.send(str.encode(f'#{epoch+1:02d}#{logs[\"accuracy\"]:015.10f}#{logs[\"val_accuracy\"]:015.10f}#{logs[\"loss\"]:015.10f}#{logs[\"val_loss\"]:015.10f}'))\n"
     +"    def on_train_batch_end(self, batch, logs=None):\n"
-    +"        conn.send(str.encode(\"@\"+str(batch+1)))\n\n")
+    +"        conn.send(str.encode(f'@{batch+1:02d}@{logs[\"accuracy\"]:015.10f}@{logs[\"loss\"]:015.10f}{\"@\"*32}'))\n\n")
 
     for model in models:
         if model['id']==1:
@@ -121,7 +120,7 @@ def cnn2(f, models, uid, port, fn):
             +"model.summary()\n"
             +"model.fit(train_images, train_labels, batch_size="+model['batch_size']+", epochs="+model['epochs']+", callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n")
     
-    f.write("model.save('/home/b04/桌面/Github/Api/api/media/'+ uid + '/')\n")
+    f.write("model.save('"+ path +"' + '/')\n")
 
 def create_thread(path, uid):
     with open(path + "/combine.py", "r") as r:
@@ -198,7 +197,7 @@ class UploadViewSet(APIView):
 
         f = open(path + "/combine.py", "w+")
 
-        cnn2(f, modelIN, userID, port, fileUpload[0].name)
+        cnn2(f, path, modelIN, userID, port, fileUpload[0].name)
         f.close()
         
         # Take mission for Celery worker to run file
