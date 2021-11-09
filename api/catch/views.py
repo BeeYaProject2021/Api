@@ -108,16 +108,18 @@ def cnn2(f, path, models, uid, port, fn):
 
     for model in models:
         if model['id']==1:
-            if 'input_shape' not in model:
-                f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"'))\n")
-            else:
-                f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"', input_shape=("+model['input_shape'][0]+", "+model['input_shape'][1]+", 3)))\n")
+            # if 'input_shape' not in model:
+            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"'))\n")
+            # else:
+            #     f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"', input_shape=("+model['input_shape'][0]+", "+model['input_shape'][1]+", 3)))\n")
         elif model['id']==2:
             f.write("model.add(layers.MaxPooling2D(pool_size="+model['pool_size']+"))\n")
         elif model['id']==3:
             f.write("model.add(layers.Flatten())\n")
         elif model['id']==4:
             f.write("model.add(layers.Dense("+model['units']+", activation='"+model['activation']+"'))\n")
+        elif model['id']==5:
+            f.write("model.add(layers.Input(input_shape=("+model['input_shape'][0]+", "+model['input_shape'][1]+", "+model['input_shape'][2]+")))\n")
         elif model['id']==-1:
             f.write("opt=optimizers."+model['optimizer']+"(lr="+model['learning_rate']+")\n")
             f.write("model.compile(optimizer=opt,loss='"+model['loss_fn']+"',metrics=['accuracy'])\n"
