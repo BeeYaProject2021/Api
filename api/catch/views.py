@@ -64,7 +64,8 @@ def cnn2(f, path, models, uid, port, fn):
     +"\nimport socket\n"
     +"ServerSocket = socket.socket()\n"
     +"ServerSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
-    +"host = '140.136.151.88'\n"
+    +"host = '140.136.204.132'\n"
+    # +"host = '140.136.151.88'\n"
     +"port = " + str(port) + "\n\n"
     +"try:\n"
     +"    ServerSocket.bind((host, port))\n"
@@ -74,6 +75,9 @@ def cnn2(f, path, models, uid, port, fn):
     +"ServerSocket.listen(1)\n"
     +"conn, address = ServerSocket.accept()\n"
     +"print('Connected to: ' + address[0] + ':' + str(address[1]))\n\n")
+
+    f.write("gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.25)\n"
+    +"sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))\n")
 
     f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
     +"uid = '" + str(uid) + "'\n"
@@ -161,6 +165,7 @@ class UploadViewSet(APIView):
         
         global port
         port += 1
+        now_port = port
         # To get list of files and code id
         fileUpload = request.FILES.getlist('file')
         print(fileUpload[0].name)
@@ -168,21 +173,6 @@ class UploadViewSet(APIView):
 
         # Use json to load string as json object
         modelIN = json.loads(models)
-        # for i in modelIN:
-        #     id = i['id']
-        #     print("id is", id)
-        #     if id == 1:
-        #         print(i['filters'])
-        #         print(i['kernel_size'])
-        #         print(i['padding'])
-        #         print(i['activation'])
-        #     elif id == 2:
-        #         print(i['pool_size'])
-        #     elif id == 3:
-        #         continue
-        #     else:
-        #         print(i['units'])
-        #         print(i['activation'])
 
         # Create uuid to be path
         userID = uuid.uuid4().hex
@@ -197,12 +187,12 @@ class UploadViewSet(APIView):
 
         f = open(path + "/combine.py", "w+")
 
-        cnn2(f, path, modelIN, userID, port, fileUpload[0].name)
+        cnn2(f, path, modelIN, userID, now_port, fileUpload[0].name)
         f.close()
         
         # Take mission for Celery worker to run file
         RunUserData.delay(path, userID)
-        print('Port Number: ' + str(port))
+        print('Port Number: ' + str(now_port))
 
         # Response with files' names and uuid for user
         return Response(ans + " " + str(userID) + " " + str(port))

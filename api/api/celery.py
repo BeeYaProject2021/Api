@@ -4,7 +4,8 @@ from celery import Celery
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'api.settings')
-BROKER_URL = 'pyamqp://B04:BFuV+90434@140.136.151.88:5672/api'
+BROKER_URL = 'pyamqp://fju:csie0607@140.136.204.132:5672/api'
+# BROKER_URL = 'pyamqp://B04:BFuV+90434@140.136.151.88:5672/api'
 BACKEND = 'redis://localhost/0'
 # worker_max_tasks_per_child -> for one task per worker and then he die
 app = Celery('api', broker=BROKER_URL, worker_max_tasks_per_child=1)
