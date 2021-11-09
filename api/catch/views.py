@@ -119,7 +119,7 @@ def cnn2(f, path, models, uid, port, fn):
         elif model['id']==4:
             f.write("model.add(layers.Dense("+model['units']+", activation='"+model['activation']+"'))\n")
         elif model['id']==5:
-            f.write("model.add(layers.Input(shape=("+model['shape'][0]+", "+model['shape'][1]+", "+model['input_shape'][2]+")))\n")
+            f.write("model.add(layers.Input(shape=("+model['input_shape'][0]+", "+model['input_shape'][1]+", "+model['input_shape'][2]+")))\n")
         elif model['id']==-1:
             f.write("opt=optimizers."+model['optimizer']+"(lr="+model['learning_rate']+")\n")
             f.write("model.compile(optimizer=opt,loss='"+model['loss_fn']+"',metrics=['accuracy'])\n"
