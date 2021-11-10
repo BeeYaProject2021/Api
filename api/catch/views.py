@@ -61,7 +61,7 @@ def cnn2(f, path, models, uid, port, fn):
     +"import numpy as np\n"
     +"from tensorflow import keras\n"
     +"from tensorflow.keras import layers, models, optimizers\n"
-    +"\nimport socket\n"
+    +"\nimport socket, time\n"
     +"ServerSocket = socket.socket()\n"
     +"ServerSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
     +"host = '140.136.204.132'\n"
@@ -92,19 +92,15 @@ def cnn2(f, path, models, uid, port, fn):
     f.write("class CustomCallback(keras.callbacks.Callback):\n"
     +"    global conn\n"
     +"    def on_train_end(self, logs=None):\n"
-    +"        keys = list(logs.keys())\n"
-    +"        print(\"THE KEY is {}\".format(keys))\n"
-    +"        print(logs['accuracy'], logs['val_accuracy'])\n"
     +"        print(\"\\n----Training Done!----\")\n"
-    +"        conn.send(str.encode(\"!\"+str(logs['accuracy'])))\n"
-    +"        conn.send(str.encode(\"!\"+str(logs['val_accuracy'])))\n"
-    +"        conn.send(str.encode(\"!Training Done!\"))\n"
-    +"        conn.send(str.encode(\"over\"))\n"
+    +"        conn.send(str.encode(\"over\\r\\n\"))\n"
     +"        conn.close()\n"
     +"    def on_epoch_end(self, epoch, logs=None):\n"
-    +"        conn.send(str.encode(f'#{epoch+1:02d}#{logs[\"accuracy\"]:015.10f}#{logs[\"val_accuracy\"]:015.10f}#{logs[\"loss\"]:015.10f}#{logs[\"val_loss\"]:015.10f}'))\n"
+    +"        time.sleep(0.02)\n"
+    +"        conn.send(str.encode(f'#{epoch+1:02d}#{logs[\"accuracy\"]:015.10f}#{logs[\"val_accuracy\"]:015.10f}#{logs[\"loss\"]:015.10f}#{logs[\"val_loss\"]:015.10f}\\r\\n'))\n"
     +"    def on_train_batch_end(self, batch, logs=None):\n"
-    +"        conn.send(str.encode(f'@{batch+1:02d}@{logs[\"accuracy\"]:015.10f}@{logs[\"loss\"]:015.10f}{\"@\"*32}'))\n\n")
+    +"        time.sleep(0.02)\n"    
+    +"        conn.send(str.encode(f'@{batch+1:02d}@{logs[\"accuracy\"]:015.10f}@{logs[\"loss\"]:015.10f}\\r\\n'))\n\n")
 
     for model in models:
         if model['id']==1:
@@ -172,7 +168,7 @@ class UploadViewSet(APIView):
         fileUpload = request.FILES.getlist('file')
         print(fileUpload[0].name)
         models = request.data.get('model')
-
+        print(models)
         # Use json to load string as json object
         modelIN = json.loads(models)
 
@@ -197,7 +193,7 @@ class UploadViewSet(APIView):
         print('Port Number: ' + str(now_port))
 
         # Response with files' names and uuid for user
-        return Response(ans + " " + str(userID) + " " + str(port))
+        return Response(ans + " " + str(userID) + " " + str(now_port))
 
 # Test for GET and POST methods, had implemented by viewsets
 class TestViewSet(viewsets.ModelViewSet):
