@@ -24,7 +24,6 @@ from catch import views
 from catch.views import UploadViewSet
 
 router = DefaultRouter()
-router.register(r'test', views.TestViewSet)
 # router.register(r'train_status', views.TrainViewSet)
 
 urlpatterns = [
@@ -32,6 +31,6 @@ urlpatterns = [
     path('catch/', include('catch.urls')),
     path('', include(router.urls)),
     path('upload/', UploadViewSet.as_view()),
-    path('download/', views.downloadModel)
-    # path('upload/<str:filename>', UploadViewSet.as_view())
+    path('download/', views.downloadModel),
+    path('test/', TestViewSet.as_view())
 ]

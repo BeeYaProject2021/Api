@@ -18,6 +18,10 @@ def RunUserData(path, id):
     # os.system(f"python3 {path}/combine.py")
     # Popen(path+'/combine.py')
 
+def RunTest(path):
+    with open(path + "/test.py", "r") as r:
+        exec(r.read())
+
 @shared_task
 def add(x, y):
     time.sleep(5)

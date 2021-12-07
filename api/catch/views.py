@@ -26,7 +26,7 @@ from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
 from .models import Test, Upload, Train
 from .serializers import TestSerializer, TrainSerializer, UploadSerializer
 from django.conf import settings
-from catch.tasks import RunUserData
+from catch.tasks import RunUserData, RunTest
 
 port = 48762
 
@@ -55,7 +55,7 @@ def downloadModel(request):
 
     return response
 
-#CNN model
+# CNN model
 def cnn2(f, path, models, uid, port, fn):
     f.write("import tensorflow as tf\n"
     +"import numpy as np\n"
@@ -124,6 +124,41 @@ def cnn2(f, path, models, uid, port, fn):
     
     f.write("model.save('"+ path +"' + '/')\n")
 
+def test_model(f, port, fn, path, batch):
+    f.write("import tensorflow as tf\n"
+    +"import numpy as np\n"
+    +"from tensorflow import keras\n"
+    +"from tensorflow.keras import models\n\n")
+
+    f.write("import socket\n"
+    +"ServerSocket = socket.socket()\n"
+    +"ServerSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+    +"host = '140.136.204.132'\n"
+    # +"host = '140.136.151.88'\n"
+    +"port = " + str(port) + "\n\n"
+    +"try:\n"
+    +"    ServerSocket.bind((host, port))\n"
+    +"except socket.error as e:\n"
+    +"    print(str(e))\n\n"
+    +"print('Waiting for a Connection..')\n"
+    +"ServerSocket.listen(1)\n"
+    +"conn, address = ServerSocket.accept()\n"
+    +"print('Connected to: ' + address[0] + ':' + str(address[1]))\n\n")
+
+    f.write("file_name = '" + fn + "'\n"
+    +"test = np.load('"+ path +"' + '/' + file_name)\n")
+
+    f.write("test_images, test_labels = test['test_img'], test['test_lab']\n"
+    +"test_images = test_images / 255.0\n\n")
+
+    f.write("test_model = models.load_model('"+ path +"' + '/')\n"
+    +"new_model.summary()\n"
+    +"results = new_model.evaluate(test_images, test_labels, batch_size='"+ batch +"')\n"
+    +"conn.send(str.encode(results[0]))\n"
+    +"conn.send(str.encode(results[1])\n"
+    +"conn.close()\n")
+
+
 def create_thread(path, uid):
     with open(path + "/combine.py", "r") as r:
         exec(r.read())
@@ -134,7 +169,7 @@ def catch(request):
         'current_time': str(datetime.now()),
     })
 
-# Test for upload file
+# Upload file and Training
 class UploadViewSet(APIView):
     serializer_class = TrainSerializer
 
@@ -193,9 +228,29 @@ class UploadViewSet(APIView):
         print('Port Number: ' + str(now_port))
 
         # Response with files' names and uuid for user
-        return Response(ans + " " + str(userID) + " " + str(now_port))
+        return Response("Training : " + ans + " " + str(userID) + " " + str(now_port))
 
-# Test for GET and POST methods, had implemented by viewsets
-class TestViewSet(viewsets.ModelViewSet):
-    serializer_class = TestSerializer
-    queryset = Test.objects.all()
+# Test model
+class TestViewSet(APIView):
+
+    def post(self, request, format=None):
+        
+        global port
+        port += 1
+        now_port = port
+        print('Port Number: ' + str(now_port))
+        # To get test file
+        fileUpload = request.FILES.getlist('file')
+        print(fileUpload[0].name)
+        uid = request.data.get('uid')
+        print(uid)
+        batch = request.data.get('batch')
+        print(batch)
+
+        path = settings.MEDIA_ROOT + f"/{uid}"
+        f = open(path + "/test.py", "w+")
+        test_model(f, now_port, fileUpload[0].name, path, batch)
+        f.close()
+
+        RunTest.delay(path)
+        return Response("Testing : " + str(userID) + " " + str(now_port))
