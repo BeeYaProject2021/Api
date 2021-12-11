@@ -21,7 +21,7 @@ from django.views.generic import base
 
 from rest_framework.routers import DefaultRouter
 from catch import views
-from catch.views import UploadViewSet
+from catch.views import UploadViewSet, TestViewSet
 
 router = DefaultRouter()
 # router.register(r'train_status', views.TrainViewSet)

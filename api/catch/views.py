@@ -152,10 +152,11 @@ def test_model(f, port, fn, path, batch):
     +"test_images = test_images / 255.0\n\n")
 
     f.write("test_model = models.load_model('"+ path +"' + '/')\n"
-    +"new_model.summary()\n"
-    +"results = new_model.evaluate(test_images, test_labels, batch_size='"+ batch +"')\n"
-    +"conn.send(str.encode(results[0]))\n"
-    +"conn.send(str.encode(results[1])\n"
+    +"test_model.summary()\n\n")
+
+    f.write("result_loss, result_acc = test_model.evaluate(test_images, test_labels, batch_size='"+ batch +"')\n"
+    +"conn.send(str.encode(result_loss))\n"
+    +"conn.send(str.encode(results_acc)\n"
     +"conn.close()\n")
 
 
@@ -228,7 +229,7 @@ class UploadViewSet(APIView):
         print('Port Number: ' + str(now_port))
 
         # Response with files' names and uuid for user
-        return Response("Training : " + ans + " " + str(userID) + " " + str(now_port))
+        return Response(ans + " " + str(userID) + " " + str(now_port))
 
 # Test model
 class TestViewSet(APIView):
@@ -246,6 +247,9 @@ class TestViewSet(APIView):
         print(uid)
         batch = request.data.get('batch')
         print(batch)
+        ans = request.data.get('ans')
+        print(ans)
+
 
         path = settings.MEDIA_ROOT + f"/{uid}"
         f = open(path + "/test.py", "w+")
@@ -253,4 +257,4 @@ class TestViewSet(APIView):
         f.close()
 
         RunTest.delay(path)
-        return Response("Testing : " + str(userID) + " " + str(now_port))
+        return Response(str(uid) + " " + str(now_port))
