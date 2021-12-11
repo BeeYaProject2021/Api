@@ -14,6 +14,8 @@ from zipfile import ZipFile
 
 from datetime import datetime
 
+from django.utils.functional import empty
+
 from rest_framework import serializers, viewsets, status
 from rest_framework.generics import GenericAPIView
 from rest_framework.viewsets import ViewSet
@@ -61,6 +63,7 @@ def cnn2(f, path, models, uid, port, fn):
     +"import numpy as np\n"
     +"from tensorflow import keras\n"
     +"from tensorflow.keras import layers, models, optimizers\n"
+    +"from tensorflow.keras.datasets import mnist\n"
     +"\nimport socket, time\n"
     +"ServerSocket = socket.socket()\n"
     +"ServerSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
@@ -77,17 +80,39 @@ def cnn2(f, path, models, uid, port, fn):
     +"print('Connected to: ' + address[0] + ':' + str(address[1]))\n\n")
 
     f.write("gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.25)\n"
-    +"sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))\n")
+    +"sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))\n\n"
+    +"dataset = " + str(models[0]['dataset']) + "\n")
 
-    f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
-    +"uid = '" + str(uid) + "'\n"
-    +"file_name = '" + fn + "'\n"
-    +"train = np.load('"+ path +"' + '/' + file_name)\n"
-    +"train_images, train_labels = train['train_img'], train['train_lab']\n"
-    +"test_images, test_labels = train['test_img'], train['test_lab']\n"
-    +"train_images = train_images / 255.0\n"
-    +"test_images = test_images / 255.0\n\n"
-    +"model = models.Sequential()\n\n")
+    if models[0]['dataset'] == 0:
+        f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
+        +"uid = '" + str(uid) + "'\n"
+        +"file_name = '" + fn + "'\n"
+        +"train = np.load('"+ path +"' + '/' + file_name)\n"
+        +"trainX, trainY = train['train_img'], train['train_lab']\n"
+        +"testX, testY = train['test_img'], train['test_lab']\n"
+        +"trainX = trainX / 255.0\n"
+        +"testX = testX / 255.0\n\n"
+        +"model = models.Sequential()\n\n"
+        +"img_h = trainX.shape[1]\n"
+        +"img_w = trainX.shape[2]\n"
+        +"rgb = trainX.shape[3]\n"
+        +"input_shape = (img_h, img_w, rgb)\n\n")
+    else:
+        # Else use default
+        # mnist(1), fashion_mnist(2), cifar10(3), cifar100(4)
+        f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
+        +"uid = '" + str(uid) + "'\n"
+        +"(trainX, trainY), (testX, testY) = mnist.load_data()\n"
+        +"trainX = trainX.reshape(trainX.shape[0], trainX.shape[1], trainX.shape[2], 1)\n"
+        +"trainX = trainX / 255.0\n"
+        +"testX = testX.reshape(testX.shape[0], testX.shape[1], testX.shape[2], 1)\n"
+        +"testX = testX / 255.0\n"
+        +"trainY = tf.one_hot(trainY.astype(np.int32), depth=10)\n"
+        +"testY = tf.one_hot(testY.astype(np.int32), depth=10)\n"
+        +"model = models.Sequential()\n\n"
+        +"input_shape=(trainX.shape[1], trainX.shape[2], 1)\n\n")
+
+    f.write("conn.send(str.encode(str(trainX.shape[0])+\"\\r\\n\"))\n\n")
     
     f.write("class CustomCallback(keras.callbacks.Callback):\n"
     +"    global conn\n"
@@ -96,31 +121,26 @@ def cnn2(f, path, models, uid, port, fn):
     +"        conn.send(str.encode(\"over\\r\\n\"))\n"
     +"        conn.close()\n"
     +"    def on_epoch_end(self, epoch, logs=None):\n"
-    +"        time.sleep(0.02)\n"
+    +"        time.sleep(0.01)\n"
     +"        conn.send(str.encode(f'#{epoch+1:02d}#{logs[\"accuracy\"]:015.10f}#{logs[\"val_accuracy\"]:015.10f}#{logs[\"loss\"]:015.10f}#{logs[\"val_loss\"]:015.10f}\\r\\n'))\n"
     +"    def on_train_batch_end(self, batch, logs=None):\n"
-    +"        time.sleep(0.02)\n"    
+    +"        time.sleep(0.01)\n"    
     +"        conn.send(str.encode(f'@{batch+1:02d}@{logs[\"accuracy\"]:015.10f}@{logs[\"loss\"]:015.10f}\\r\\n'))\n\n")
 
     for model in models:
         if model['id']==1:
-            # if 'input_shape' not in model:
-            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"'))\n")
-            # else:
-            #     f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"', input_shape=("+model['input_shape'][0]+", "+model['input_shape'][1]+", 3)))\n")
+            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"', input_shape=(input_shape)))\n")
         elif model['id']==2:
-            f.write("model.add(layers.MaxPooling2D(pool_size="+model['pool_size']+"))\n")
+            f.write("model.add(layers."+model['pool_type']+"Pooling2D(pool_size="+model['pool_size']+"))\n")
         elif model['id']==3:
             f.write("model.add(layers.Flatten())\n")
         elif model['id']==4:
             f.write("model.add(layers.Dense("+model['units']+", activation='"+model['activation']+"'))\n")
-        elif model['id']==5:
-            f.write("model.add(layers.Input(shape=("+model['input_shape'][0]+", "+model['input_shape'][1]+", "+model['input_shape'][2]+")))\n")
         elif model['id']==-1:
             f.write("opt=optimizers."+model['optimizer']+"(lr="+model['learning_rate']+")\n")
             f.write("model.compile(optimizer=opt,loss='"+model['loss_fn']+"',metrics=['accuracy'])\n"
             +"model.summary()\n"
-            +"model.fit(train_images, train_labels, batch_size="+model['batch_size']+", epochs="+model['epochs']+", callbacks=[CustomCallback()], validation_data=(test_images, test_labels))\n")
+            +"model.fit(trainX, trainY, batch_size="+model['batch_size']+", epochs="+model['epochs']+", callbacks=[CustomCallback()], validation_data=(testX, testY))\n")
     
     f.write("model.save('"+ path +"' + '/')\n")
 
@@ -148,8 +168,8 @@ def test_model(f, port, fn, path, batch):
     f.write("file_name = '" + fn + "'\n"
     +"test = np.load('"+ path +"' + '/' + file_name)\n")
 
-    f.write("test_images, test_labels = test['test_img'], test['test_lab']\n"
-    +"test_images = test_images / 255.0\n\n")
+    f.write("testX, testY = test['test_img'], test['test_lab']\n"
+    +"testX = testX / 255.0\n\n")
 
     f.write("test_model = models.load_model('"+ path +"' + '/')\n"
     +"test_model.summary()\n\n")
@@ -202,11 +222,16 @@ class UploadViewSet(APIView):
         now_port = port
         # To get list of files and code id
         fileUpload = request.FILES.getlist('file')
-        print(fileUpload[0].name)
+        
+        file_name = None
+        if fileUpload:
+            file_name = fileUpload[0].name
+
         models = request.data.get('model')
         print(models)
         # Use json to load string as json object
         modelIN = json.loads(models)
+        # print(modelIN[0]['dataset'])
 
         # Create uuid to be path
         userID = uuid.uuid4().hex
@@ -221,11 +246,11 @@ class UploadViewSet(APIView):
 
         f = open(path + "/combine.py", "w+")
 
-        cnn2(f, path, modelIN, userID, now_port, fileUpload[0].name)
+        cnn2(f, path, modelIN, userID, now_port, file_name)
         f.close()
         
         # Take mission for Celery worker to run file
-        RunUserData.delay(path, userID)
+        # RunUserData.delay(path, userID)
         print('Port Number: ' + str(now_port))
 
         # Response with files' names and uuid for user
