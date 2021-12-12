@@ -97,7 +97,7 @@ def cnn2(f, path, models, uid, port, fn):
         +"img_w = trainX.shape[2]\n"
         +"rgb = trainX.shape[3]\n"
         +"input_shape = (img_h, img_w, rgb)\n\n")
-    else:
+    elif models[0]['dataset'] == 1:
         # Else use default
         # mnist(1), fashion_mnist(2), cifar10(3), cifar100(4)
         f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
@@ -111,6 +111,14 @@ def cnn2(f, path, models, uid, port, fn):
         +"testY = tf.one_hot(testY.astype(np.int32), depth=10)\n"
         +"model = models.Sequential()\n\n"
         +"input_shape=(trainX.shape[1], trainX.shape[2], 1)\n\n")
+    else:
+        f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
+        +"uid = '" + str(uid) + "'\n"
+        +"(trainX, trainY), (testX, testY) = cifar10.load_data()\n"
+        +"trainX = trainX / 255.0\n"
+        +"testX = testX / 255.0\n"
+        +"model = models.Sequential()\n\n"
+        +"input_shape=(trainX.shape[1], trainX.shape[2], 3)\n\n")     
 
     f.write("conn.send(str.encode(str(trainX.shape[0])+\"\\r\\n\"))\n\n")
     
@@ -144,7 +152,7 @@ def cnn2(f, path, models, uid, port, fn):
     
     f.write("model.save('"+ path +"' + '/')\n")
 
-def test_model(f, port, fn, path, batch):
+def test_model(f, port, fn, path, batch, ans):
     f.write("import tensorflow as tf\n"
     +"import numpy as np\n"
     +"from tensorflow import keras\n"
@@ -168,16 +176,24 @@ def test_model(f, port, fn, path, batch):
     f.write("file_name = '" + fn + "'\n"
     +"test = np.load('"+ path +"' + '/' + file_name)\n")
 
-    f.write("testX, testY = test['test_img'], test['test_lab']\n"
-    +"testX = testX / 255.0\n\n")
-
     f.write("test_model = models.load_model('"+ path +"' + '/')\n"
     +"test_model.summary()\n\n")
 
-    f.write("result_loss, result_acc = test_model.evaluate(test_images, test_labels, batch_size='"+ batch +"')\n"
-    +"conn.send(str.encode(result_loss))\n"
-    +"conn.send(str.encode(results_acc)\n"
-    +"conn.close()\n")
+    if ans == 0:
+        f.write("testX = test['test_img']\n"
+        +"testX = testX / 255.0\n\n")
+
+        f.write("predicts = np.argmax(test_model.predict(testX), axis=1)\n"
+        +"for i in predicts:\n"
+        +"    conn.send(str.encode(f'{i}\\r\\n'))\n"
+        +"    conn.close()\n")
+    else:
+        f.write("testX, testY = test['test_img'], test['test_lab']\n"
+        +"testX = testX / 255.0\n\n")
+
+        f.write("result_loss, result_acc = test_model.evaluate(test_images, test_labels, batch_size='"+ batch +"')\n"
+        +"conn.send(str.encode(f'#{result_loss:015.10f}#{results_acc:015.10f}\\r\\n'))\n"
+        +"conn.close()\n")
 
 
 def create_thread(path, uid):
@@ -250,7 +266,7 @@ class UploadViewSet(APIView):
         f.close()
         
         # Take mission for Celery worker to run file
-        # RunUserData.delay(path, userID)
+        RunUserData.delay(path, userID)
         print('Port Number: ' + str(now_port))
 
         # Response with files' names and uuid for user
@@ -278,7 +294,7 @@ class TestViewSet(APIView):
 
         path = settings.MEDIA_ROOT + f"/{uid}"
         f = open(path + "/test.py", "w+")
-        test_model(f, now_port, fileUpload[0].name, path, batch)
+        test_model(f, now_port, fileUpload[0].name, path, batch, ans)
         f.close()
 
         RunTest.delay(path)
