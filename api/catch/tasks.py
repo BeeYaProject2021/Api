@@ -18,6 +18,7 @@ def RunUserData(path, id):
     # os.system(f"python3 {path}/combine.py")
     # Popen(path+'/combine.py')
 
+@shared_task
 def RunTest(path):
     with open(path + "/test.py", "r") as r:
         exec(r.read())

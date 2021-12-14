@@ -132,14 +132,14 @@ def cnn2(f, path, models, uid, port, fn):
     +"        time.sleep(0.01)\n"
     +"        conn.send(str.encode(f'#{epoch+1:02d}#{logs[\"accuracy\"]:015.10f}#{logs[\"val_accuracy\"]:015.10f}#{logs[\"loss\"]:015.10f}#{logs[\"val_loss\"]:015.10f}\\r\\n'))\n"
     +"    def on_train_batch_end(self, batch, logs=None):\n"
-    +"        time.sleep(0.01)\n"    
+    +"        time.sleep(0.02)\n"    
     +"        conn.send(str.encode(f'@{batch+1:02d}@{logs[\"accuracy\"]:015.10f}@{logs[\"loss\"]:015.10f}\\r\\n'))\n\n")
 
     for model in models:
         if model['id']==1:
-            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", padding='"+model['padding']+"', activation='"+model['activation']+"', input_shape=(input_shape)))\n")
+            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", strides="+model['strides']+", padding='"+model['padding']+"', activation='"+model['activation']+"', input_shape=(input_shape)))\n")
         elif model['id']==2:
-            f.write("model.add(layers."+model['pool_type']+"Pooling2D(pool_size="+model['pool_size']+"))\n")
+            f.write("model.add(layers."+model['pool_type']+"Pooling2D(pool_size="+model['pool_size']+", strides="+model['strides']+"))\n")
         elif model['id']==3:
             f.write("model.add(layers.Flatten())\n")
         elif model['id']==4:
@@ -152,7 +152,7 @@ def cnn2(f, path, models, uid, port, fn):
     
     f.write("model.save('"+ path +"' + '/')\n")
 
-def test_model(f, port, fn, path, batch, ans):
+def test_model(f, port, path, batch):
     f.write("import tensorflow as tf\n"
     +"import numpy as np\n"
     +"from tensorflow import keras\n"
@@ -173,27 +173,17 @@ def test_model(f, port, fn, path, batch, ans):
     +"conn, address = ServerSocket.accept()\n"
     +"print('Connected to: ' + address[0] + ':' + str(address[1]))\n\n")
 
-    f.write("file_name = '" + fn + "'\n"
-    +"test = np.load('"+ path +"' + '/' + file_name)\n")
+    f.write("test = np.load('"+ path +"' + '/test')\n")
 
     f.write("test_model = models.load_model('"+ path +"' + '/')\n"
     +"test_model.summary()\n\n")
 
-    if ans == 0:
-        f.write("testX = test['test_img']\n"
-        +"testX = testX / 255.0\n\n")
+    f.write("testX, testY = test['test_img'], test['test_lab']\n"
+    +"testX = testX / 255.0\n\n")
 
-        f.write("predicts = np.argmax(test_model.predict(testX), axis=1)\n"
-        +"for i in predicts:\n"
-        +"    conn.send(str.encode(f'{i}\\r\\n'))\n"
-        +"    conn.close()\n")
-    else:
-        f.write("testX, testY = test['test_img'], test['test_lab']\n"
-        +"testX = testX / 255.0\n\n")
-
-        f.write("result_loss, result_acc = test_model.evaluate(test_images, test_labels, batch_size='"+ batch +"')\n"
-        +"conn.send(str.encode(f'#{result_loss:015.10f}#{results_acc:015.10f}\\r\\n'))\n"
-        +"conn.close()\n")
+    f.write("result_loss, result_acc = test_model.evaluate(testX, testY, batch_size="+ batch +")\n"
+    +"conn.send(str.encode(f'#{result_loss:015.10f}#{results_acc:015.10f}\\r\\n'))\n"
+    +"conn.close()\n")
 
 
 def create_thread(path, uid):
@@ -288,13 +278,16 @@ class TestViewSet(APIView):
         print(uid)
         batch = request.data.get('batch')
         print(batch)
-        ans = request.data.get('ans')
-        print(ans)
 
 
         path = settings.MEDIA_ROOT + f"/{uid}"
+        ans = "test"
+        for i in fileUpload:
+            # Store list of files with absolutely path
+            default_storage.save(path + "/" + ans, ContentFile(i.read()))
+
         f = open(path + "/test.py", "w+")
-        test_model(f, now_port, fileUpload[0].name, path, batch, ans)
+        test_model(f, now_port, path, batch)
         f.close()
 
         RunTest.delay(path)
