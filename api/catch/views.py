@@ -63,10 +63,9 @@ def cnn2(f, path, models, uid, port, fn):
     +"import numpy as np\n"
     +"from tensorflow import keras\n"
     +"from tensorflow.keras import layers, models, optimizers\n"
-    +"from tensorflow.keras.datasets import mnist\n"
     +"\nimport socket, time\n"
-    +"ServerSocket = socket.socket()\n"
-    +"ServerSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+    +"ServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n"
+    +"ServerSocket.setsockopt(socket.SOL_SOCKET, socket.SO_OOBINLINE, 1)\n"
     +"host = '140.136.204.132'\n"
     # +"host = '140.136.151.88'\n"
     +"port = " + str(port) + "\n\n"
@@ -102,23 +101,43 @@ def cnn2(f, path, models, uid, port, fn):
         # mnist(1), fashion_mnist(2), cifar10(3), cifar100(4)
         f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
         +"uid = '" + str(uid) + "'\n"
-        +"(trainX, trainY), (testX, testY) = mnist.load_data()\n"
+        +"(trainX, trainY), (testX, testY) = keras.datasets.mnist.load_data()\n"
         +"trainX = trainX.reshape(trainX.shape[0], trainX.shape[1], trainX.shape[2], 1)\n"
         +"trainX = trainX / 255.0\n"
         +"testX = testX.reshape(testX.shape[0], testX.shape[1], testX.shape[2], 1)\n"
         +"testX = testX / 255.0\n"
-        +"trainY = tf.one_hot(trainY.astype(np.int32), depth=10)\n"
-        +"testY = tf.one_hot(testY.astype(np.int32), depth=10)\n"
         +"model = models.Sequential()\n\n"
         +"input_shape=(trainX.shape[1], trainX.shape[2], 1)\n\n")
-    else:
+    elif models[0]['dataset'] == 2:
         f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
         +"uid = '" + str(uid) + "'\n"
-        +"(trainX, trainY), (testX, testY) = cifar10.load_data()\n"
+        +"(trainX, trainY), (testX, testY) = keras.datasets.fashion_mnist.load_data()\n"
+        +"trainX = trainX.reshape(trainX.shape[0], trainX.shape[1], trainX.shape[2], 1)\n"
+        +"trainX = trainX / 255.0\n"
+        +"testX = testX.reshape(testX.shape[0], testX.shape[1], testX.shape[2], 1)\n"
+        +"testX = testX / 255.0\n"
+        +"model = models.Sequential()\n\n"
+        +"input_shape=(trainX.shape[1], trainX.shape[2], 1)\n\n")        
+    elif models[0]['dataset'] == 3:
+        f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
+        +"uid = '" + str(uid) + "'\n"
+        +"(trainX, trainY), (testX, testY) = keras.datasets.cifar10.load_data()\n"
         +"trainX = trainX / 255.0\n"
         +"testX = testX / 255.0\n"
         +"model = models.Sequential()\n\n"
-        +"input_shape=(trainX.shape[1], trainX.shape[2], 3)\n\n")     
+        +"input_shape=(trainX.shape[1], trainX.shape[2], 3)\n\n")
+    else:
+        f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
+        +"uid = '" + str(uid) + "'\n"
+        +"(trainX, trainY), (testX, testY) = keras.datasets.cifar100.load_data()\n"
+        +"trainX = trainX / 255.0\n"
+        +"testX = testX / 255.0\n"
+        +"model = models.Sequential()\n\n"
+        +"input_shape=(trainX.shape[1], trainX.shape[2], 3)\n\n")   
+
+    # if models[-1]['loss_fn'] != "sparse_categorical_crossentropy":   
+    f.write("trainY = keras.utils.to_categorical(trainY)\n"
+    +"testY = keras.utils.to_categorical(testY)\n")
 
     f.write("conn.send(str.encode(str(trainX.shape[0])+\"\\r\\n\"))\n\n")
     
@@ -129,28 +148,35 @@ def cnn2(f, path, models, uid, port, fn):
     +"        conn.send(str.encode(\"over\\r\\n\"))\n"
     +"        conn.close()\n"
     +"    def on_epoch_end(self, epoch, logs=None):\n"
-    +"        time.sleep(0.01)\n"
+    +"        time.sleep(0.02)\n"
     +"        conn.send(str.encode(f'#{epoch+1:02d}#{logs[\"accuracy\"]:015.10f}#{logs[\"val_accuracy\"]:015.10f}#{logs[\"loss\"]:015.10f}#{logs[\"val_loss\"]:015.10f}\\r\\n'))\n"
     +"    def on_train_batch_end(self, batch, logs=None):\n"
-    +"        time.sleep(0.02)\n"    
+    +"        time.sleep(0.03)\n"    
     +"        conn.send(str.encode(f'@{batch+1:02d}@{logs[\"accuracy\"]:015.10f}@{logs[\"loss\"]:015.10f}\\r\\n'))\n\n")
 
+    f.write("try:\n\n")
+
+    f.write("    model.add(layers.InputLayer(input_shape=(input_shape)))\n")
     for model in models:
         if model['id']==1:
-            f.write("model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", strides="+model['strides']+", padding='"+model['padding']+"', activation='"+model['activation']+"', input_shape=(input_shape)))\n")
+            f.write("    model.add(layers.Conv2D("+model['filters']+", "+model['kernel_size']+", strides="+model['strides']+", padding='"+model['padding']+"', activation='"+model['activation']+"'))\n")
         elif model['id']==2:
-            f.write("model.add(layers."+model['pool_type']+"Pooling2D(pool_size="+model['pool_size']+", strides="+model['strides']+"))\n")
+            f.write("    model.add(layers."+model['pool_type']+"Pooling2D(pool_size="+model['pool_size']+", strides="+model['strides']+"))\n")
         elif model['id']==3:
-            f.write("model.add(layers.Flatten())\n")
+            f.write("    model.add(layers.Flatten())\n")
         elif model['id']==4:
-            f.write("model.add(layers.Dense("+model['units']+", activation='"+model['activation']+"'))\n")
+            f.write("    model.add(layers.Dense("+model['units']+", activation='"+model['activation']+"'))\n")
         elif model['id']==-1:
-            f.write("opt=optimizers."+model['optimizer']+"(lr="+model['learning_rate']+")\n")
-            f.write("model.compile(optimizer=opt,loss='"+model['loss_fn']+"',metrics=['accuracy'])\n"
-            +"model.summary()\n"
-            +"model.fit(trainX, trainY, batch_size="+model['batch_size']+", epochs="+model['epochs']+", callbacks=[CustomCallback()], validation_data=(testX, testY))\n")
+            f.write("    opt=optimizers."+model['optimizer']+"(lr="+model['learning_rate']+")\n")
+            f.write("    model.compile(optimizer=opt,loss='"+model['loss_fn']+"',metrics=['accuracy'])\n"
+            +"    model.summary()\n"
+            +"    model.fit(trainX, trainY, batch_size="+model['batch_size']+", epochs="+model['epochs']+", callbacks=[CustomCallback()], validation_data=(testX, testY))\n")
     
-    f.write("model.save('"+ path +"' + '/')\n")
+    f.write("    model.save('"+ path +"' + '/')\n")
+    f.write("except Exception as e:\n"
+    +"    conn.send(str.encode(\"error:\" + str(e)))\n"
+    +"    print(\"OHNO! \" + str(e))\n"
+    +"    conn.close()")
 
 def test_model(f, port, path, batch):
     f.write("import tensorflow as tf\n"
@@ -173,17 +199,26 @@ def test_model(f, port, path, batch):
     +"conn, address = ServerSocket.accept()\n"
     +"print('Connected to: ' + address[0] + ':' + str(address[1]))\n\n")
 
-    f.write("test = np.load('"+ path +"' + '/test')\n")
+    f.write("test = np.load('"+ path +"' + '/test.npz')\n")
 
     f.write("test_model = models.load_model('"+ path +"' + '/')\n"
     +"test_model.summary()\n\n")
 
     f.write("testX, testY = test['test_img'], test['test_lab']\n"
-    +"testX = testX / 255.0\n\n")
+    +"testX = testX / 255.0\n"
+    +"testY = keras.utils.to_categorical(testY)\n\n")
 
-    f.write("result_loss, result_acc = test_model.evaluate(testX, testY, batch_size="+ batch +")\n"
-    +"conn.send(str.encode(f'#{result_loss:015.10f}#{results_acc:015.10f}\\r\\n'))\n"
-    +"conn.close()\n")
+    f.write("try:\n")
+
+    f.write("    result_loss, result_acc = test_model.evaluate(testX, testY, batch_size="+ batch +")\n"
+    +"    conn.send(str.encode(f'#{result_loss:015.10f}#{result_acc:015.10f}\\r\\n'))\n"
+    +"    print(result_loss, result_acc)\n"
+    +"    conn.close()\n")
+
+    f.write("except Exception as e:\n"
+    +"    conn.send(str.encode(\"error:\" + str(e)))\n"
+    +"    print(\"OHNO! \" + str(e))\n"
+    +"    conn.close()")
 
 
 def create_thread(path, uid):
@@ -281,7 +316,7 @@ class TestViewSet(APIView):
 
 
         path = settings.MEDIA_ROOT + f"/{uid}"
-        ans = "test"
+        ans = "test.npz"
         for i in fileUpload:
             # Store list of files with absolutely path
             default_storage.save(path + "/" + ans, ContentFile(i.read()))
