@@ -178,7 +178,7 @@ def cnn2(f, path, models, uid, port, fn):
     +"    print(\"OHNO! \" + str(e))\n"
     +"    conn.close()")
 
-def test_model(f, port, path, batch):
+def test_model(f, port, path, batch, img_h, img_w, img_c, fn):
     f.write("import tensorflow as tf\n"
     +"import numpy as np\n"
     +"from tensorflow import keras\n"
@@ -210,16 +210,32 @@ def test_model(f, port, path, batch):
 
     f.write("try:\n")
 
-    f.write("    result_loss, result_acc = test_model.evaluate(testX, testY, batch_size="+ batch +")\n"
-    +"    conn.send(str.encode(f'#{result_loss:015.10f}#{result_acc:015.10f}\\r\\n'))\n"
-    +"    print(result_loss, result_acc)\n"
-    +"    predicts = test_model.predict(testX)\n"
-    +"    possible = np.argmax(predicts, axis=1)\n"
-    +"    true = np.argmax(testY, axis=1)\n"
-    +"    for i in possible:\n"
-    +"        conn.send(str.encode(str(i) + \"\\r\\n\"))\n"
-    +"    conn.send(str.encode(\"over\\r\\n\"))\n"
-    +"    conn.close()\n")
+    if batch != None:
+        f.write("    result_loss, result_acc = test_model.evaluate(testX, testY, batch_size="+ batch +")\n"
+        +"    conn.send(str.encode(f'#{result_loss:015.5f}#{result_acc:015.5f}\\r\\n'))\n"
+        +"    print(result_loss, result_acc)\n"
+        +"    predicts = test_model.predict(testX)\n"
+        +"    possible = np.argmax(predicts, axis=1)\n"
+        +"    print(\"size: \", len(possible))\n"
+        +"    true = np.argmax(testY, axis=1)\n"
+        +"    for i in possible:\n"
+        +"        conn.send(str.encode(str(i) + \"\\r\\n\"))\n"
+        +"    conn.send(str.encode(\"over\\r\\n\"))\n"
+        +"    conn.close()\n")
+    else:
+        f.write("    'file_name = '" + fn + "'\n")
+        if img_c == 0:
+            f.write("    img = tf.keras.preprocessing.image.load_img('"+ path +"' + '/' + filename, target_size=(" +img_h+", " +img_w+"), color_mode=\"grayscale\")\n")
+        else:
+            f.write("    img = tf.keras.preprocessing.image.load_img('"+ path +"' + '/' + filename, target_size=(" +img_h+", " +img_w+"))\n")
+        f.write("    img_arr = tf.keras.preprocessing.image.img_to_array(img)\n"
+        +"    img_arr = tf.expand_dims(img_arr, 0)\n"
+        +"    predict_img = test_model.predict(img_arr)\n"
+        +"    score = tf.nn.softmax(predict_img[0])\n"
+        +"    guess = np.argmax(score)\n"
+        +"    conn.send(str.encode(f'#{guess}#{np.max(score)*100}\\r\\n'))\n"
+        +"    conn.send(str.encode(\"over\\r\\n\"))\n"
+        +"    conn.close()\n")
 
     f.write("except Exception as e:\n"
     +"    conn.send(str.encode(\"error:\" + str(e)))\n"
@@ -315,11 +331,24 @@ class TestViewSet(APIView):
         # To get test file
         fileUpload = request.FILES.getlist('file')
         print(fileUpload[0].name)
+        fn = fileUpload[0].name
+
         uid = request.data.get('uid')
         print(uid)
         batch = request.data.get('batch')
-        print(batch)
-
+        # print(batch)
+        img_h = request.data.get('img_h')
+        img_w = request.data.get('img_w')
+        img_c = request.data.get('img_c')
+        batch_size, h, w, c = None, None, None, None
+        if batch:
+            batch_size = batch
+        if img_h:
+            h = img_h
+        if img_w:
+            w = img_w
+        if img_c:
+            c = img_c
 
         path = settings.MEDIA_ROOT + f"/{uid}"
         ans = "test.npz"
@@ -328,7 +357,7 @@ class TestViewSet(APIView):
             default_storage.save(path + "/" + ans, ContentFile(i.read()))
 
         f = open(path + "/test.py", "w+")
-        test_model(f, now_port, path, batch)
+        test_model(f, now_port, path, batch_size, h, w, c, fn)
         f.close()
 
         RunTest.delay(path)
