@@ -213,6 +213,12 @@ def test_model(f, port, path, batch):
     f.write("    result_loss, result_acc = test_model.evaluate(testX, testY, batch_size="+ batch +")\n"
     +"    conn.send(str.encode(f'#{result_loss:015.10f}#{result_acc:015.10f}\\r\\n'))\n"
     +"    print(result_loss, result_acc)\n"
+    +"    predicts = test_model.predict(testX)\n"
+    +"    possible = np.argmax(predicts, axis=1)\n"
+    +"    true = np.argmax(testY, axis=1)\n"
+    +"    for i in possible:\n"
+    +"        conn.send(str.encode(str(i) + \"\\r\\n\"))\n"
+    +"    conn.send(str.encode(\"over\\r\\n\"))\n"
     +"    conn.close()\n")
 
     f.write("except Exception as e:\n"
