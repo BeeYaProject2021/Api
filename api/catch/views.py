@@ -44,7 +44,7 @@ def downloadModel(request):
             zip_filename = path + f"/{uid}.zip"
             zipObj = zipfile.ZipFile(zip_filename, "w")
             zipObj.write(path + "/combine.py", basename(path + "/combine.py"))
-            zipObj.write(path + "/saved_model.pb", basename(path + "/saved_model.pb"))
+            zipObj.write(path + "/saved_model.pb", basename(path + "/saved_model.h5"))
             zipObj.close()
 
             model = open(path + f"/{uid}.zip", "rb")
@@ -78,7 +78,7 @@ def cnn2(f, path, models, uid, port, fn):
     +"conn, address = ServerSocket.accept()\n"
     +"print('Connected to: ' + address[0] + ':' + str(address[1]))\n\n")
 
-    f.write("gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.25)\n"
+    f.write("gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.30)\n"
     +"sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))\n\n"
     +"dataset = " + str(models[0]['dataset']) + "\n")
 
@@ -98,7 +98,7 @@ def cnn2(f, path, models, uid, port, fn):
         +"input_shape = (img_h, img_w, rgb)\n\n")
     elif models[0]['dataset'] == 1:
         # Else use default
-        # mnist(1), fashion_mnist(2), cifar10(3), cifar100(4)
+        # mnist(1), fashion_mnist(2), cifar10(3)
         f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
         +"uid = '" + str(uid) + "'\n"
         +"(trainX, trainY), (testX, testY) = keras.datasets.mnist.load_data()\n"
@@ -118,18 +118,10 @@ def cnn2(f, path, models, uid, port, fn):
         +"testX = testX / 255.0\n"
         +"model = models.Sequential()\n\n"
         +"input_shape=(trainX.shape[1], trainX.shape[2], 1)\n\n")        
-    elif models[0]['dataset'] == 3:
-        f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
-        +"uid = '" + str(uid) + "'\n"
-        +"(trainX, trainY), (testX, testY) = keras.datasets.cifar10.load_data()\n"
-        +"trainX = trainX / 255.0\n"
-        +"testX = testX / 255.0\n"
-        +"model = models.Sequential()\n\n"
-        +"input_shape=(trainX.shape[1], trainX.shape[2], 3)\n\n")
     else:
         f.write("print(\"CNN TRAINING START!\\n\\n\")\n"
         +"uid = '" + str(uid) + "'\n"
-        +"(trainX, trainY), (testX, testY) = keras.datasets.cifar100.load_data()\n"
+        +"(trainX, trainY), (testX, testY) = keras.datasets.cifar10.load_data()\n"
         +"trainX = trainX / 255.0\n"
         +"testX = testX / 255.0\n"
         +"model = models.Sequential()\n\n"
@@ -172,7 +164,7 @@ def cnn2(f, path, models, uid, port, fn):
             +"    model.summary()\n"
             +"    model.fit(trainX, trainY, batch_size="+model['batch_size']+", epochs="+model['epochs']+", callbacks=[CustomCallback()], validation_data=(testX, testY))\n")
     
-    f.write("    model.save('"+ path +"' + '/')\n")
+    f.write("    model.save('"+ path +"' + '/saved_model.h5')\n")
     f.write("except Exception as e:\n"
     +"    conn.send(str.encode(\"error:\" + str(e)))\n"
     +"    print(\"OHNO! \" + str(e))\n"
@@ -199,18 +191,17 @@ def test_model(f, port, path, batch, img_h, img_w, img_c, fn):
     +"conn, address = ServerSocket.accept()\n"
     +"print('Connected to: ' + address[0] + ':' + str(address[1]))\n\n")
 
-    f.write("test = np.load('"+ path +"' + '/test.npz')\n")
-
-    f.write("test_model = models.load_model('"+ path +"' + '/')\n"
+    f.write("test_model = models.load_model('"+ path +"' + '/saved_model.h5')\n"
     +"test_model.summary()\n\n")
-
-    f.write("testX, testY = test['test_img'], test['test_lab']\n"
-    +"testX = testX / 255.0\n"
-    +"testY = keras.utils.to_categorical(testY)\n\n")
 
     f.write("try:\n")
 
     if batch != None:
+        f.write("    test = np.load('"+ path +"' + '/test.npz')\n")
+        f.write("    testX, testY = test['test_img'], test['test_lab']\n"
+        +"    testX = testX / 255.0\n"
+        +"    testY = keras.utils.to_categorical(testY)\n\n")
+
         f.write("    result_loss, result_acc = test_model.evaluate(testX, testY, batch_size="+ batch +")\n"
         +"    conn.send(str.encode(f'#{result_loss:015.5f}#{result_acc:015.5f}\\r\\n'))\n"
         +"    print(result_loss, result_acc)\n"
@@ -223,18 +214,18 @@ def test_model(f, port, path, batch, img_h, img_w, img_c, fn):
         +"    conn.send(str.encode(\"over\\r\\n\"))\n"
         +"    conn.close()\n")
     else:
-        f.write("    'file_name = '" + fn + "'\n")
-        if img_c == 0:
+        f.write("    filename = '" + fn + "'\n")
+        if int(img_c) == 0:
             f.write("    img = tf.keras.preprocessing.image.load_img('"+ path +"' + '/' + filename, target_size=(" +img_h+", " +img_w+"), color_mode=\"grayscale\")\n")
         else:
             f.write("    img = tf.keras.preprocessing.image.load_img('"+ path +"' + '/' + filename, target_size=(" +img_h+", " +img_w+"))\n")
         f.write("    img_arr = tf.keras.preprocessing.image.img_to_array(img)\n"
         +"    img_arr = tf.expand_dims(img_arr, 0)\n"
-        +"    predict_img = test_model.predict(img_arr)\n"
-        +"    score = tf.nn.softmax(predict_img[0])\n"
-        +"    guess = np.argmax(score)\n"
-        +"    conn.send(str.encode(f'#{guess}#{np.max(score)*100}\\r\\n'))\n"
-        +"    conn.send(str.encode(\"over\\r\\n\"))\n"
+        +"    predict_img = test_model.predict(img_arr/255.0)\n"
+        +"    guess = np.argmax(predict_img[0])\n"
+        +"    conn.send(str.encode(f'#{guess}#{np.max(predict_img[0]):.3f}\\r\\n'))\n"
+        +"    print(predict_img)\n"
+        # +"    conn.send(str.encode(\"over\\r\\n\"))\n"
         +"    conn.close()\n")
 
     f.write("except Exception as e:\n"
@@ -343,18 +334,25 @@ class TestViewSet(APIView):
         batch_size, h, w, c = None, None, None, None
         if batch:
             batch_size = batch
+            print("batch: ", batch_size)
         if img_h:
             h = img_h
         if img_w:
             w = img_w
         if img_c:
             c = img_c
+            print("img is: ", c)
 
         path = settings.MEDIA_ROOT + f"/{uid}"
-        ans = "test.npz"
-        for i in fileUpload:
-            # Store list of files with absolutely path
-            default_storage.save(path + "/" + ans, ContentFile(i.read()))
+
+        if fileUpload[0].name.endswith('.npz'):
+            ans = "test.npz"
+            for i in fileUpload:
+                # Store list of files with absolutely path
+                default_storage.save(path + "/" + ans, ContentFile(i.read()))
+        else:
+            for i in fileUpload:
+                default_storage.save(path + "/" + i.name, ContentFile(i.read()))
 
         f = open(path + "/test.py", "w+")
         test_model(f, now_port, path, batch_size, h, w, c, fn)
